@@ -1,0 +1,6 @@
+apiVersion: autoheal.redhat.com/v1alpha1
+kind: Autoheal
+metadata:
+  name: autoheal-sample
+spec:
+  # TODO(user): Add fields here

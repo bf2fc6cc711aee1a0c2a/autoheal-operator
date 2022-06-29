@@ -1,0 +1,9 @@
+domain: redhat.com
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: autoheal-operator
+repo: github.com/bf2fc6cc711aee1a0c2a/autoheal-operator
+version: "3"

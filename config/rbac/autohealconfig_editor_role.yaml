@@ -1,0 +1,24 @@
+# permissions for end users to edit autohealconfigs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: autohealconfig-editor-role
+rules:
+- apiGroups:
+  - autoheal.redhat.com
+  resources:
+  - autohealconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoheal.redhat.com
+  resources:
+  - autohealconfigs/status
+  verbs:
+  - get

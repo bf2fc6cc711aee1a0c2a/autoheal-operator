@@ -1,0 +1,59 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - autoheal.redhat.com
+  resources:
+  - autohealconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoheal.redhat.com
+  resources:
+  - autohealconfigs/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - autoheal.redhat.com
+  resources:
+  - autohealconfigs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - autoheal.redhat.com
+  resources:
+  - autoheals
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoheal.redhat.com
+  resources:
+  - autoheals/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - autoheal.redhat.com
+  resources:
+  - autoheals/status
+  verbs:
+  - get
+  - patch
+  - update

@@ -1,0 +1,5 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+- autoheal_v1alpha1_autoheal.yaml
+- autoheal_v1alpha1_autohealconfig.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

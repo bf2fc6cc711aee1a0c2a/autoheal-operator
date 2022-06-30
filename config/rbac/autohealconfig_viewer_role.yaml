@@ -1,0 +1,20 @@
+# permissions for end users to view autohealconfigs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: autohealconfig-viewer-role
+rules:
+- apiGroups:
+  - autoheal.redhat.com
+  resources:
+  - autohealconfigs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - autoheal.redhat.com
+  resources:
+  - autohealconfigs/status
+  verbs:
+  - get

@@ -35,13 +35,17 @@ spec:
           spec:
             description: AutohealConfigSpec defines the desired state of AutohealConfig
             properties:
-              foo:
-                description: Foo is an example field of AutohealConfig. Edit autohealconfig_types.go
-                  to remove/update
+              secretName:
+                type: string
+              syncPeriod:
                 type: string
             type: object
           status:
             description: AutohealConfigStatus defines the observed state of AutohealConfig
+            properties:
+              lastSyncPeriod:
+                format: int64
+                type: integer
             type: object
         type: object
     served: true

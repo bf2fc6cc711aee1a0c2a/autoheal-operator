@@ -4,3 +4,4 @@ metadata:
   name: autoheal-config
 spec:
   syncPeriod: 1h
+  secretName: autoheal-config

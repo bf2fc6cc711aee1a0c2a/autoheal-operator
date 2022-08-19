@@ -1,42 +1,29 @@
 package controllers
 
 import (
-	// "runtime"
-	// "net/http"
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	// "k8s.io/apimachinery/pkg/types"
-
-	// // "k8s.io/apimachinery/pkg/runtime"
-	// "k8s.io/kubernetes/pkg/apis/core"
-	// "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	core "k8s.io/api/core/v1"
-	// "sigs.k8s.io/controller-runtime/pkg/client"
-	// core "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/bf2fc6cc711aee1a0c2a/autoheal-operator/api/v1alpha1"
-	// "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	// "sigs.k8s.io/controller-runtime/pkg/client"
-	// "github.com/bf2fc6cc711aee1a0c2a/autoheal-operator/api/v1alpha1"
-	// "github.com/bf2fc6cc711aee1a0c2a/autoheal-operator/controllers"
 )
 
 var (
 	tag         = "test-tag"
 	repoUrl     = "http://localhost:8080"
 	accessToken = "test-token"
-	// sha         = "380580u9ghwr9tq9"
-	autoheal    = v1alpha1.AutohealConfig{ObjectMeta: metav1.ObjectMeta{
-		Namespace: "autoheal-operator",
-		Name:      "autoheal-test",
-	},
+	autoheal    = v1alpha1.AutohealConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "autoheal-operator",
+			Name:      "autoheal-test",
+		},
 		Spec: v1alpha1.AutohealConfigSpec{SecretName: "autoheal-config"},
 	}
 	configRepo = v1alpha1.AutohealConfigTree{
@@ -58,14 +45,40 @@ var (
 	}
 )
 
+func mockHttpClientGood() *httptest.Server {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"tree":[{"path":"scenarios/fleetshard/example_broken_issue.yaml"},{"path":"scenarios/fleetshard/README.md"}]}`))
+	}))
+
+	return mockServer
+}
+
+func mockHttpClientBad() *httptest.Server {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{[{}]}`))
+	}))
+	return mockServer
+}
+
+func mockHttpClientGoodBad() *httptest.Server {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Length", "1")
+		w.Write([]byte(`{[{"path":""}]}`))
+	}))
+	return mockServer
+}
+func mockHttpClientGoodFiles() *httptest.Server {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("name: Test-name\nquery: Test query >2\nlabel: test label\nscript: println(\"hello world\")\ngracePeriod: 2m"))
+	}))
+	return mockServer
+}
+
 func TestGetConfigRepoSecret(t *testing.T) {
 
-	// autoheal := &v1alpha1.AutohealConfig{ObjectMeta: metav1.ObjectMeta{
-	// 	Namespace: "autoheal-operator",
-	// 	Name:      "autoheal-test",
-	// },
-	// 	Spec: v1alpha1.AutohealConfigSpec{SecretName: "autoheal-config"},
-	// }
 	status := &v1alpha1.AutohealConfigStatus{LastSyncPeriod: 50}
 
 	type fields struct {
@@ -77,6 +90,7 @@ func TestGetConfigRepoSecret(t *testing.T) {
 		autoheal *v1alpha1.AutohealConfig
 		status   *v1alpha1.AutohealConfigStatus
 	}
+
 	tests := []struct {
 		name   string
 		fields fields
@@ -108,7 +122,6 @@ func TestGetConfigRepoSecret(t *testing.T) {
 			err: false,
 		},
 		{
-
 			name: "Test secret is not present and function returns nothing",
 			fields: fields{
 				fake.NewClientBuilder().WithRuntimeObjects(&core.Secret{}).Build(),
@@ -141,7 +154,7 @@ func TestGetConfigRepoSecret(t *testing.T) {
 			err:  false,
 		},
 		{
-			name: "Test secret is present but url cannot be parsed",
+			name: "Test secret is present but url cannot be parsed returns nothing, error thrown",
 			fields: fields{
 				fake.NewClientBuilder().WithRuntimeObjects(&core.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: autoheal.Namespace, Name: autoheal.Spec.SecretName},
 					Data: map[string][]byte{
@@ -178,40 +191,6 @@ func TestGetConfigRepoSecret(t *testing.T) {
 
 }
 
-func mockHttpClientGood(t *testing.T) *httptest.Server {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"tree":[{"path":"scenarios/fleetshard/example_broken_issue.yaml"},{"path":"scenarios/fleetshard/README.md"}]}`))
-	}))
-
-	return mockServer
-}
-
-func mockHttpClientBad(t *testing.T) *httptest.Server {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadGateway)
-		w.Write([]byte(`{[{}]}`))
-	}))
-	return mockServer
-}
-
-func mockHttpClientNoYaml(t *testing.T) *httptest.Server {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"tree":[{"path":"scenarios/fleetshard/README.md"},{"path":"scenarios/fleetshard/README2.md"},{"path":"scenarios/fleetshard"}]}`))
-	}))
-
-	return mockServer
-}
-func mockHttpClientGoodBad(t *testing.T) *httptest.Server {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Content-Length", "1")
-		w.Write([]byte(`{[{"path":""}]}`))
-	}))
-
-	return mockServer
-}
-
 func TestReadFiles(t *testing.T) {
 
 	type fields struct {
@@ -221,10 +200,9 @@ func TestReadFiles(t *testing.T) {
 	type args struct {
 		repo *v1alpha1.ConfigRepositoryInfo
 	}
-	mockGood := mockHttpClientGood(t)
-	mockBad := mockHttpClientBad(t)
-	// mockNoYaml := mockHttpClientNoYaml(t)
-	mockGoodBad := mockHttpClientGoodBad(t)
+	mockGood := mockHttpClientGood()
+	mockBad := mockHttpClientBad()
+	mockGoodBad := mockHttpClientGoodBad()
 
 	tests := []struct {
 		name   string
@@ -234,7 +212,7 @@ func TestReadFiles(t *testing.T) {
 		err    bool
 	}{
 		{
-			name: "Test data is present, correct and struct gets populated",
+			name: "Test repo data is present, correct and struct gets populated",
 			fields: fields{
 				mockGood,
 			},
@@ -245,9 +223,8 @@ func TestReadFiles(t *testing.T) {
 
 			err: false,
 		},
-
 		{
-			name: "Bad gateway, struct does not get populated",
+			name: "Bad gateway, struct does not get populated returns nothing",
 			fields: fields{
 				mockBad,
 			},
@@ -258,7 +235,7 @@ func TestReadFiles(t *testing.T) {
 			err:  false,
 		},
 		{
-			name: "Cant make new request",
+			name: "Cant make new request returns nothing, error thrown",
 			fields: fields{
 				mockBad,
 			},
@@ -268,22 +245,8 @@ func TestReadFiles(t *testing.T) {
 			want: nil,
 			err:  true,
 		},
-		// {
-		// 	name: "No yaml files present",
-		// 	fields: fields{
-		// 		&mockNoYaml,
-		// 	},
-		// 	args: args{
-		// 		repo: &v1alpha1.ConfigRepositoryInfo{Tag: tag, RepositoryURL: mockNoYaml.URL, AccessToken: accessToken},
-		// 	},
-		// 	want:  &v1alpha1.AutohealConfigTree{
-
-		// 		Tree: []v1alpha1.AutohealConfigTreeResponse{},
-		// 	},
-		// 	err: false,
-		// },
 		{
-			name: "Cant read request body",
+			name: "Cant read request body returns nothing, error thrown",
 			fields: fields{
 				mockGoodBad,
 			},
@@ -306,27 +269,17 @@ func TestReadFiles(t *testing.T) {
 
 			}
 			if !reflect.DeepEqual(files, tt.want) {
-				fmt.Print("got", files)
-				fmt.Print("want", tt.want)
+
 				t.Errorf("readFiles() got = %v want %v", files, tt.want)
 			}
 		})
 	}
 }
 
-func mockHttpClientGoodFiles(t *testing.T) *httptest.Server {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("name: Test-name\nquery: Test query >2\nlabel: test label\nscript: println(\"hello world\")\ngracePeriod: 2m"))
-	}))
-
-	return mockServer
-}
-
 func TestGetScenarios(t *testing.T) {
-	mockGoodFiles := mockHttpClientGoodFiles(t)
-	mockBad := mockHttpClientBad(t)
-	mockGoodBad := mockHttpClientGoodBad(t)
+	mockGoodFiles := mockHttpClientGoodFiles()
+	mockBad := mockHttpClientBad()
+	mockGoodBad := mockHttpClientGoodBad()
 
 	type fields struct {
 		httpClient *httptest.Server
@@ -346,7 +299,7 @@ func TestGetScenarios(t *testing.T) {
 		err    bool
 	}{
 		{
-			name: "Get files and populate struct",
+			name: "Get files and populate struct. Returns a scenario struct",
 			fields: fields{
 				mockGoodFiles,
 			},
@@ -359,9 +312,8 @@ func TestGetScenarios(t *testing.T) {
 			want: configScenario,
 			err:  false,
 		},
-
 		{
-			name: "Bad gateway, struct does not get populated",
+			name: "Bad gateway, struct does not get populated returns nothing",
 			fields: fields{
 				mockBad,
 			},
@@ -374,7 +326,7 @@ func TestGetScenarios(t *testing.T) {
 			err:  false,
 		},
 		{
-			name: "Cant make new request",
+			name: "Cant make new request returns nothing, error thrown",
 			fields: fields{
 				mockBad,
 			},
@@ -387,22 +339,8 @@ func TestGetScenarios(t *testing.T) {
 			want: nil,
 			err:  true,
 		},
-		// {
-		// 	name: "No yaml files present",
-		// 	fields: fields{
-		// 		&mockNoYaml,
-		// 	},
-		// 	args: args{
-		// 		repo: &v1alpha1.ConfigRepositoryInfo{Tag: tag, RepositoryURL: mockNoYaml.URL, AccessToken: accessToken},
-		// 	},
-		// 	want:  &v1alpha1.AutohealConfigTree{
-
-		// 		Tree: []v1alpha1.AutohealConfigTreeResponse{},
-		// 	},
-		// 	err: false,
-		// },
 		{
-			name: "Cant read request body",
+			name: "Cant read request body returns nothing, error thrown",
 			fields: fields{
 				mockGoodBad,
 			},
@@ -428,15 +366,13 @@ func TestGetScenarios(t *testing.T) {
 
 			}
 			if !reflect.DeepEqual(files, tt.want) {
-				fmt.Print("got", files)
-				fmt.Print("want", tt.want)
 				t.Errorf("readFiles() got = %v want %v", files, tt.want)
 			}
 		})
 	}
 }
 
-func TestConfigSecret(t *testing.T) {
+func TestDeleteConfigmap(t *testing.T) {
 	type fields struct {
 		Client client.Client
 	}
@@ -453,16 +389,23 @@ func TestConfigSecret(t *testing.T) {
 		err    bool
 	}{
 		{
-			name: "Test secret is deleted ",
+			name: "Test configmap is deleted ",
 			fields: fields{
-				fake.NewClientBuilder().WithRuntimeObjects(&core.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: autoheal.Namespace, Name: autoheal.Spec.SecretName},
-					Data: map[string][]byte{
-						"tag":          []byte(tag),
-						"access_token": []byte(accessToken),
-						"repository":   []byte(repoUrl),
+				fake.NewClientBuilder().WithRuntimeObjects(&core.ConfigMapList{Items: []core.ConfigMap{
+					{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "autoheal-operator",
+						Labels: map[string]string{
+							"app": "autoheal"},
 					},
-				}).Build(),
+						Data: map[string]string{
+							"Name":        "Test-name",
+							"Query":       "Test query >2",
+							"Label":       "test label",
+							"script":      `println("hello world")`,
+							"GracePeriod": "2m",
+						},
+					}}}).Build(),
 			},
+
 			args: args{
 				ctx:      context.TODO(),
 				autoheal: &autoheal,
@@ -470,31 +413,36 @@ func TestConfigSecret(t *testing.T) {
 			err: false,
 		},
 		{
-			name: "Test secret not found",
+			name: "Test configmap has different label",
 			fields: fields{
-				fake.NewClientBuilder().WithRuntimeObjects(&core.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: autoheal.Namespace, Name: "test"},
-					Data: map[string][]byte{
-						"tag":          []byte(tag),
-						"access_token": []byte(accessToken),
-						"repository":   []byte(repoUrl),
+				fake.NewClientBuilder().WithRuntimeObjects(&core.ConfigMapList{Items: []core.ConfigMap{
+					{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "autoheal-operator",
+						Labels: map[string]string{
+							"app": "test"},
 					},
-				}).Build(),
+						Data: map[string]string{
+							"Name":        "Test-name",
+							"Query":       "Test query >2",
+							"Label":       "test label",
+							"script":      `println("hello world")`,
+							"GracePeriod": "2m",
+						},
+					}}}).Build(),
 			},
 			args: args{
 				ctx:      context.TODO(),
 				autoheal: &autoheal,
 			},
-			err: true,
+			err: false,
 		},
-	
-}
+	}
 
-for _, tt := range tests {
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := AutohealConfigReconciler{
 				Client: tt.fields.Client,
 			}
-			err := r.deleteConfigSecret( tt.args.autoheal,tt.args.ctx)
+			err := r.deleteConfigmap(tt.args.autoheal, tt.args.ctx)
 			if (err != nil) != tt.err {
 
 				t.Errorf("readFiles() error = %v wantedError= %v", err, tt.err)
@@ -504,65 +452,175 @@ for _, tt := range tests {
 	}
 }
 
-// func TestConfigSecret(t *testing.T) {
-// 	type fields struct {
-// 		Client client.Client
-// 	}
+func TestCreateConfigMaps(t *testing.T) {
 
-// 	type args struct {
-// 		ctx      context.Context
-// 		autoheal *v1alpha1.AutohealConfig
-// 	}
+	type fields struct {
+		Client client.Client
+	}
 
-// 	tests := []struct {
-// 		name   string
-// 		fields fields
-// 		args   args
-// 		err    bool
-// 	}{
-// 		{
-// 			name: "Test secret is deleted ",
-// 			fields: fields{
-// 				fake.NewClientBuilder().WithRuntimeObjects(&core.ConfigMapList{
-// 				}).Build(),
-// 			},
-// 			args: args{
-// 				ctx:      context.TODO(),
-// 				autoheal: &autoheal,
-// 			},
-// 			err: false,
-// 		},
-// 		{
-// 			name: "Test secret not found",
-// 			fields: fields{
-// 				fake.NewClientBuilder().WithRuntimeObjects(&core.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: autoheal.Namespace, Name: "test"},
-// 					Data: map[string][]byte{
-// 						"tag":          []byte(tag),
-// 						"access_token": []byte(accessToken),
-// 						"repository":   []byte(repoUrl),
-// 					},
-// 				}).Build(),
-// 			},
-// 			args: args{
-// 				ctx:      context.TODO(),
-// 				autoheal: &autoheal,
-// 			},
-// 			err: true,
-// 		},
-	
-// }
+	type args struct {
+		ctx      context.Context
+		autoheal *v1alpha1.AutohealConfig
+		scenario []v1alpha1.AutohealConfigScenario
+	}
 
-// for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			r := AutohealConfigReconciler{
-// 				Client: tt.fields.Client,
-// 			}
-// 			err := r.deleteConfigSecret( tt.args.autoheal,tt.args.ctx)
-// 			if (err != nil) != tt.err {
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		err    bool
+	}{
+		{
+			name: "Test config map is created ",
+			fields: fields{
+				fake.NewClientBuilder().WithRuntimeObjects().Build(),
+			},
 
-// 				t.Errorf("readFiles() error = %v wantedError= %v", err, tt.err)
+			args: args{
+				ctx:      context.TODO(),
+				autoheal: &autoheal,
+				scenario: configScenario,
+			},
+			err: false,
+		},
+		{
+			name: "Test configmap has data thats outdated should be replaced",
+			fields: fields{
+				fake.NewClientBuilder().WithRuntimeObjects(&core.ConfigMapList{Items: []core.ConfigMap{
+					{ObjectMeta: metav1.ObjectMeta{Name: "Test-name", Namespace: "autoheal-operator",
+						Labels: map[string]string{
+							"app": "test"},
+					},
+						Data: map[string]string{
+							"query":       "Test query >2",
+							"label":       "test label1",
+							"script":      `println("hello")`,
+							"gracePeriod": "2m",
+						},
+					}}}).Build(),
+			},
+			args: args{
+				ctx:      context.TODO(),
+				autoheal: &autoheal,
+				scenario: configScenario,
+			},
+			err: false,
+		},
+	}
 
-// 			}
-// 		})
-// 	}
-// }
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := AutohealConfigReconciler{
+				Client: tt.fields.Client,
+			}
+			err := r.createConfigMaps(tt.args.autoheal, tt.args.scenario, tt.args.ctx)
+			if (err != nil) != tt.err {
+
+				t.Errorf("readFiles() error = %v wantedError= %v", err, tt.err)
+
+			}
+		})
+	}
+
+}
+
+func TestRemoveUnwantedConfigmap(t *testing.T) {
+	type fields struct {
+		Client client.Client
+	}
+
+	type args struct {
+		ctx      context.Context
+		scenario []v1alpha1.AutohealConfigScenario
+	}
+
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		err    bool
+	}{
+		{
+			name: "Test configmap is not deleted ",
+			fields: fields{
+				Client: fake.NewClientBuilder().WithRuntimeObjects(&core.ConfigMapList{Items: []core.ConfigMap{
+					{ObjectMeta: metav1.ObjectMeta{Name: "Test-name", Namespace: "autoheal-operator",
+						Labels: map[string]string{
+							"app": "autoheal"},
+					},
+						Data: map[string]string{
+
+							"Query":       "Test query >2",
+							"Label":       "test label",
+							"script":      `println("hello world")`,
+							"GracePeriod": "2m",
+						},
+					}}}).Build(),
+			},
+			args: args{
+				ctx:      context.TODO(),
+				scenario: configScenario,
+			},
+			err: false,
+		},
+		{
+			name: "Test configmap has different label",
+			fields: fields{
+				Client: fake.NewClientBuilder().WithRuntimeObjects(&core.ConfigMapList{Items: []core.ConfigMap{
+					{ObjectMeta: metav1.ObjectMeta{Name: "Test-name", Namespace: "autoheal-operator",
+						Labels: map[string]string{
+							"app": "test"},
+					},
+						Data: map[string]string{
+
+							"Query":       "Test query >2",
+							"Label":       "test label",
+							"script":      `println("hello world")`,
+							"GracePeriod": "2m",
+						},
+					}}}).Build(),
+			},
+			args: args{
+				ctx:      context.TODO(),
+				scenario: configScenario,
+			},
+			err: false,
+		},
+		{
+			name: "Test configmap has different name",
+			fields: fields{
+				Client: fake.NewClientBuilder().WithRuntimeObjects(&core.ConfigMapList{Items: []core.ConfigMap{
+					{ObjectMeta: metav1.ObjectMeta{Name: "Test", Namespace: "autoheal-operator",
+						Labels: map[string]string{
+							"app": "test"},
+					},
+						Data: map[string]string{
+
+							"Query":       "Test query >2",
+							"Label":       "test label",
+							"script":      `println("hello world")`,
+							"GracePeriod": "2m",
+						},
+					}}}).Build(),
+			},
+			args: args{
+				ctx:      context.TODO(),
+				scenario: configScenario,
+			},
+			err: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := AutohealConfigReconciler{
+				Client: tt.fields.Client,
+			}
+			err := r.removeUnwantedConfigmap(tt.args.ctx, &tt.args.scenario)
+			if (err != nil) != tt.err {
+
+				t.Errorf("readFiles() error = %v wantedError= %v", err, tt.err)
+
+			}
+		})
+	}
+}

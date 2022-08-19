@@ -47,9 +47,8 @@ type AutohealConfigReconciler struct {
 }
 
 const (
-	RequeueDelaySuccess     = 1 * time.Minute
-	RequeueDelayError       = 30 * time.Second
-	AutohealConfigSecret    = "autoheal-config"
+	RequeueDelaySuccess     = 10 * time.Second
+	RequeueDelayError       = 5 * time.Second
 	AutohealConfigfinalizer = "autoheal-deletion"
 )
 
@@ -77,7 +76,6 @@ func (r *AutohealConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		log.Errorf("Error getting Autoheal CR %s", err)
 		return ctrl.Result{}, err
 	}
-
 	if autoheal.DeletionTimestamp == nil && autoheal.Finalizers == nil {
 		autoheal.Finalizers = append(autoheal.Finalizers, AutohealConfigfinalizer)
 		err = r.Update(ctx, autoheal)
@@ -97,7 +95,6 @@ func (r *AutohealConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			if err != nil {
 				log.Errorf("Error parsing operator resync period %s", err)
 				return ctrl.Result{}, err
-
 			}
 			nextSync := lastSync.Add(period)
 			if time.Now().Before(nextSync) {
@@ -105,9 +102,9 @@ func (r *AutohealConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 					Requeue:      true,
 					RequeueAfter: RequeueDelaySuccess,
 				}, nil
-
 			}
 		}
+
 		configRepo, err := r.getConfigRepoSecret(ctx, autoheal, &autoheal.Status)
 		if err != nil {
 			log.Errorf("Unable to reconcile getting config repo secret %s", err)
@@ -121,7 +118,6 @@ func (r *AutohealConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			scenarios, err := r.getScenarios(files, configRepo, autoheal)
 			if err != nil {
 				log.Errorf("Unable to get scenerios from config repo %s", err)
-
 			}
 			err = r.createConfigMaps(autoheal, scenarios, ctx)
 			if err != nil {
@@ -132,16 +128,10 @@ func (r *AutohealConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				log.Error("Unable to delete unwanted configmaps")
 			}
 		}
-
 	} else {
 		err = r.deleteConfigmap(autoheal, ctx)
 		if err != nil {
 			log.Errorf("Unable to reconcile deleting config maps %s", err)
-		}
-
-		err = r.deleteConfigSecret(autoheal, ctx)
-		if err != nil {
-			log.Errorf("Unable to reconcile deleting config secret %s", err)
 		}
 		if autoheal.Finalizers != nil {
 			autoheal.Finalizers = []string{}
@@ -152,7 +142,6 @@ func (r *AutohealConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			}
 		}
 	}
-
 	return r.updateStatus(autoheal)
 }
 
@@ -166,13 +155,10 @@ func (r *AutohealConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // GetConfigRepoSecret Gets the secret needed to provide credentials to sycn with github repo
 func (r *AutohealConfigReconciler) getConfigRepoSecret(ctx context.Context, autoheal *v1alpha1.AutohealConfig, status *v1alpha1.AutohealConfigStatus) (*v1alpha1.ConfigRepositoryInfo, error) {
 	log.Info("Stage: Reading config secret")
-	configRepoSecret := &core.Secret{}
-	// secretSelector := &client.ObjectKey{
-	// 	Namespace: "autoheal-operator",
-	// 	Name:      AutohealConfigSecret,
-	// }
 
+	configRepoSecret := &core.Secret{}
 	err := r.Client.Get(ctx, client.ObjectKey{Name: autoheal.Spec.SecretName, Namespace: autoheal.Namespace}, configRepoSecret)
+
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info(err)
@@ -182,12 +168,8 @@ func (r *AutohealConfigReconciler) getConfigRepoSecret(ctx context.Context, auto
 		return nil, err
 	}
 
-	if configRepoSecret.Name != AutohealConfigSecret {
-		log.Info("Config secret not found please create the autoheal config secret")
-		return nil, nil
-	}
 	if string(configRepoSecret.Data["repository"]) == "" || string(configRepoSecret.Data["tag"]) == "" || string(configRepoSecret.Data["access_token"]) == "" {
-		log.Info("Confg secret found but values are empty")
+		log.Info("Config secret found, one or more of the values are empty")
 		return nil, nil
 	}
 
@@ -211,6 +193,7 @@ func (r *AutohealConfigReconciler) getConfigRepoSecret(ctx context.Context, auto
 func (r *AutohealConfigReconciler) readFiles(repo *v1alpha1.ConfigRepositoryInfo) (*v1alpha1.AutohealConfigTree, error) {
 	log.Info("Stage: Parsing file endpoints")
 	repoUrl, err := url.ParseRequestURI(fmt.Sprintf("%s/git/trees/%s?recursive=true", repo.RepositoryURL, repo.Tag))
+
 	if err != nil {
 		log.Errorf("Unable to parse url %s", err)
 		return nil, err
@@ -221,6 +204,7 @@ func (r *AutohealConfigReconciler) readFiles(repo *v1alpha1.ConfigRepositoryInfo
 		log.Errorf("Unable to create new http request%s", err)
 		return nil, err
 	}
+
 	req.Header.Set("Authorization", fmt.Sprintf("token %s", repo.AccessToken))
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
@@ -229,8 +213,9 @@ func (r *AutohealConfigReconciler) readFiles(repo *v1alpha1.ConfigRepositoryInfo
 		log.Errorf("Unable to send http request %s", err)
 		return nil, err
 	}
+
 	if resp.StatusCode != http.StatusOK {
-		log.Errorf("Non 200 response back, got status code %d error: %s", resp.StatusCode, err)
+		log.Infof("Non 200 response back, got status code %d ", resp.StatusCode)
 		return nil, nil
 	}
 
@@ -239,6 +224,7 @@ func (r *AutohealConfigReconciler) readFiles(repo *v1alpha1.ConfigRepositoryInfo
 		log.Errorf("Unable to read http response body %s", err)
 		return nil, err
 	}
+
 	err = resp.Body.Close()
 	if err != nil {
 		return nil, err
@@ -246,6 +232,7 @@ func (r *AutohealConfigReconciler) readFiles(repo *v1alpha1.ConfigRepositoryInfo
 
 	fileName := v1alpha1.AutohealConfigTree{}
 	files := v1alpha1.AutohealConfigTree{}
+
 	err = yaml.Unmarshal(bytes, &fileName)
 	if err != nil {
 		log.Errorf("Unable to parse yaml file endpoints from config repo %s", err)
@@ -256,11 +243,8 @@ func (r *AutohealConfigReconciler) readFiles(repo *v1alpha1.ConfigRepositoryInfo
 		if strings.Contains(endpoints.Filename, ".yaml") {
 			files.Tree = append(files.Tree, endpoints)
 		}
-
 	}
-
 	return &files, nil
-
 }
 
 // getScenarios Retrieves the scenarios scripts from the files gotten from the file names in the above function
@@ -271,7 +255,6 @@ func (r *AutohealConfigReconciler) getScenarios(files *v1alpha1.AutohealConfigTr
 	scenarios := []v1alpha1.AutohealConfigScenario{}
 
 	for _, endpoints := range files.Tree {
-		// httpclient := http.Client{}
 		repoUrl, err := url.ParseRequestURI(fmt.Sprintf("%s/contents/%s", repo.RepositoryURL, endpoints.Filename))
 		if err != nil {
 			return nil, err
@@ -281,13 +264,14 @@ func (r *AutohealConfigReconciler) getScenarios(files *v1alpha1.AutohealConfigTr
 		if err != nil {
 			log.Errorf("Unable to create new http request")
 			return nil, err
-
 		}
+
 		if repo.Tag != "" {
 			q := req.URL.Query()
 			q.Add("ref", repo.Tag)
 			req.URL.RawQuery = q.Encode()
 		}
+
 		req.Header.Set("Authorization", fmt.Sprintf("token %s", repo.AccessToken))
 		req.Header.Set("Accept", "application/vnd.github.v3.raw")
 
@@ -297,9 +281,10 @@ func (r *AutohealConfigReconciler) getScenarios(files *v1alpha1.AutohealConfigTr
 			return nil, err
 
 		}
+
 		if resp.StatusCode != http.StatusOK {
-			log.Errorf("Non 200 response back, got status code %d ", resp.StatusCode)
-			return nil, err
+			log.Infof("Non 200 response back, got status code %d ", resp.StatusCode)
+			return nil, nil
 		}
 
 		bytes, err := ioutil.ReadAll(resp.Body)
@@ -308,6 +293,7 @@ func (r *AutohealConfigReconciler) getScenarios(files *v1alpha1.AutohealConfigTr
 			return nil, err
 
 		}
+
 		err = resp.Body.Close()
 		if err != nil {
 			return nil, err
@@ -319,6 +305,7 @@ func (r *AutohealConfigReconciler) getScenarios(files *v1alpha1.AutohealConfigTr
 			return nil, err
 
 		}
+
 		scenarios = append(scenarios, scenario)
 
 	}
@@ -341,9 +328,11 @@ func (r *AutohealConfigReconciler) createConfigMaps(autoheal *v1alpha1.AutohealC
 			if configmap.Data == nil {
 				configmap.Data = make(map[string]string)
 			}
+
 			configmap.Labels = map[string]string{
 				"app": "autoheal",
 			}
+
 			configmap.Data["query"] = scenarios.Query
 			configmap.Data["label"] = scenarios.Label
 			configmap.Data["script"] = scenarios.Script
@@ -354,7 +343,6 @@ func (r *AutohealConfigReconciler) createConfigMaps(autoheal *v1alpha1.AutohealC
 		if err != nil {
 			log.Errorf("Unable to create configmap")
 			return err
-
 		}
 	}
 	return nil
@@ -363,6 +351,7 @@ func (r *AutohealConfigReconciler) createConfigMaps(autoheal *v1alpha1.AutohealC
 // updateStatus Updates the controller to how long until next requeue of the reconciller depening on if its a error or not
 func (r *AutohealConfigReconciler) updateStatus(autoheal *v1alpha1.AutohealConfig) (ctrl.Result, error) {
 	err := r.Client.Status().Update(context.Background(), autoheal)
+
 	if err != nil {
 		return ctrl.Result{
 			Requeue:      true,
@@ -376,29 +365,6 @@ func (r *AutohealConfigReconciler) updateStatus(autoheal *v1alpha1.AutohealConfi
 	}, nil
 }
 
-// deleteConfigSecret Delests the config secret with creds to sync to the repo
-func (r *AutohealConfigReconciler) deleteConfigSecret(autoheal *v1alpha1.AutohealConfig, ctx context.Context) error {
-	configRepoSecret := &core.Secret{}
-	secretSelector := &client.ObjectKey{
-		Namespace: autoheal.Namespace,
-		Name:      AutohealConfigSecret,
-	}
-	err := r.Client.Get(ctx, *secretSelector, configRepoSecret)
-	if err != nil {
-		
-		log.Error("Error cannt get config secret:",err)
-		return err
-
-	}
-	log.Info("Stage Clean up: Deleting config repo secret")
-	err = r.Client.Delete(ctx, configRepoSecret)
-	if err != nil {
-		log.Error("Error getting secret for deletion",err)
-		return err
-	}
-
-	return nil
-}
 
 // deleteConfigmap Deletes all configs for cleanup
 func (r *AutohealConfigReconciler) deleteConfigmap(autoheal *v1alpha1.AutohealConfig, ctx context.Context) error {
@@ -415,20 +381,16 @@ func (r *AutohealConfigReconciler) deleteConfigmap(autoheal *v1alpha1.AutohealCo
 		log.Errorf("Failed to get list of configmaps")
 		return err
 	}
+
 	log.Info("Stage Clean up: Deleting configmap")
+
 	for _, configs := range configmap.Items {
 		err = r.Client.Delete(ctx, &configs)
 		if err != nil {
-			if apierrors.IsNotFound(err) {
-				log.Info("Cannot find configmap:", configs)
-				return nil
-
-			}
 			log.Errorf("Error cannnot delete configmap")
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -446,6 +408,7 @@ func (r *AutohealConfigReconciler) removeUnwantedConfigmap(ctx context.Context, 
 		log.Errorf("Error cant get configmap %s", err)
 		return err
 	}
+
 	isRequested := func(name string) bool {
 		for _, files := range *scenarios {
 
@@ -464,11 +427,9 @@ func (r *AutohealConfigReconciler) removeUnwantedConfigmap(ctx context.Context, 
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					log.Info("Cannot find configmap:", configs)
-
 				}
 			}
 		}
-
 	}
 	return nil
 

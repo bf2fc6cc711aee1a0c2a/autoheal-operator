@@ -152,7 +152,7 @@ func (r *AutohealConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// GetConfigRepoSecret Gets the secret needed to provide credentials to sycn with github repo
+// GetConfigRepoSecret Gets the secret needed to provide credentials to sync with the github repo
 func (r *AutohealConfigReconciler) getConfigRepoSecret(ctx context.Context, autoheal *v1alpha1.AutohealConfig, status *v1alpha1.AutohealConfigStatus) (*v1alpha1.ConfigRepositoryInfo, error) {
 	log.Info("Stage: Reading config secret")
 
@@ -394,7 +394,7 @@ func (r *AutohealConfigReconciler) deleteConfigmap(autoheal *v1alpha1.AutohealCo
 	return nil
 }
 
-// removeUnwantedConfigmap Deletes unwanted config maps i.e if the config repo has been changed to remove a scenerio it is removed from the cluster
+// removeUnwantedConfigmap Deletes unwanted config maps i.e if the config repo has been changed to remove a scenario it is removed from the cluster
 func (r *AutohealConfigReconciler) removeUnwantedConfigmap(ctx context.Context, scenarios *[]v1alpha1.AutohealConfigScenario) error {
 	configmap := &core.ConfigMapList{}
 	configSelector := &client.ListOptions{

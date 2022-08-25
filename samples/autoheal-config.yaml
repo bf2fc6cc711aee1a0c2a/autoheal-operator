@@ -1,0 +1,7 @@
+apiVersion: autoheal.redhat.com/v1alpha1
+kind: AutohealConfig
+metadata:
+  name: autoheal-config
+spec:
+  syncPeriod: 1h
+  secretName: autoheal-config

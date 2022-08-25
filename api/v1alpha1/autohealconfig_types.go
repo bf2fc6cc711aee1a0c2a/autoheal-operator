@@ -20,22 +20,36 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // AutohealConfigSpec defines the desired state of AutohealConfig
 type AutohealConfigSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of AutohealConfig. Edit autohealconfig_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	SyncPeriod string `json:"syncPeriod,omitempty"`
+	SecretName string `json:"secretName,omitempty"`
 }
 
 // AutohealConfigStatus defines the observed state of AutohealConfig
 type AutohealConfigStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	LastSyncPeriod int64 `json:"lastSyncPeriod,omitempty"`
+}
+type ConfigRepositoryInfo struct {
+	Tag           string
+	AccessToken   string
+	RepositoryURL string
+}
+type AutohealConfigTree struct {
+	Tree []AutohealConfigTreeResponse
+}
+type AutohealConfigTreeResponse struct {
+	Filename string `json:"path"`
+}
+
+type AutohealConfigScenario struct {
+	Name        string `yaml:"name"`
+	Query       string `yaml:"query"`
+	Label       string `yaml:"label"`
+	Script      string `yaml:"script"`
+	GracePeriod string `yaml:"gracePeriod"`
 }
 
 //+kubebuilder:object:root=true
